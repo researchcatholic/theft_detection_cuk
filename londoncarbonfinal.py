@@ -51,22 +51,50 @@ from datetime import timedelta
 import datetime
 from sklearn.preprocessing import PowerTransformer
 from dateutil.rrule import rrule, DAILY
+import glob,os
+##%%
+##filepath = "C:/Users/p0p/Desktop/Power-Networks-LCL-June2015(withAcornGps)v2.csv"
+#filepath = "C:/Users/p0p/Desktop/anaomaly\London carbon/Power-Networks-LCL-June2015(withAcornGps).csv_Pieces/Power-Networks-LCL-June2015(withAcornGps).csv_Pieces/Power-Networks-LCL-June2015(withAcornGps)v2_137.csv"
+#df = pd.read_csv(filepath)
+##%%
+#df.isnull().any()
+#df.columns
+#df = df.replace('Null', 0)
+##df['KWH/hh (per half hour) '].astype('float64')
+#df['KWH/hh (per half hour) '] = pd.to_numeric(df['KWH/hh (per half hour) '])
+#df['DateTime'] = pd.to_datetime(df['DateTime'], format='%Y-%m-%d %H:%M:%S.%f')
+#df = df.rename(columns={"KWH/hh (per half hour) ": "kwh"})
+#df['kwh'].dtype
+#c_no1 = df[df['stdorToU'] == 'ToU'].LCLid.unique()
+##%%
+#df = df[df['LCLid'].isin(c_no1)]
+#%%file2
+dir = "C:/Users/p0p/Desktop/anaomaly\London carbon/Power-Networks-LCL-June2015(withAcornGps).csv_Pieces/test"
 #%%
-#filepath = "C:/Users/p0p/Desktop/Power-Networks-LCL-June2015(withAcornGps)v2.csv"
-filepath = "C:/Users/p0p/Desktop/anaomaly\London carbon/Power-Networks-LCL-June2015(withAcornGps).csv_Pieces/Power-Networks-LCL-June2015(withAcornGps).csv_Pieces/Power-Networks-LCL-June2015(withAcornGps)v2_137.csv"
-df = pd.read_csv(filepath)
+def dataframe(filepath):
+    df2 = pd.read_csv(filepath)
+    #df2.isnull().any()
+    #df2.columns
+    df2 = df2.replace('Null', 0)
+    #df['KWH/hh (per half hour) '].astype('float64')
+    df2['KWH/hh (per half hour) '] = pd.to_numeric(df2['KWH/hh (per half hour) '])
+    df2['DateTime'] = pd.to_datetime(df2['DateTime'], format='%Y-%m-%d %H:%M:%S.%f')
+    df2 = df2.rename(columns={"KWH/hh (per half hour) ": "kwh"})
+    #df2['kwh'].dtype
+    c_no2 = df2[df2['stdorToU'] == 'ToU'].LCLid.unique()
+    df2 = df2[df2['LCLid'].isin(c_no2)]
+    return df2,c_no2
 #%%
-df.isnull().any()
-df.columns
-df = df.replace('Null', 0)
-#df['KWH/hh (per half hour) '].astype('float64')
-df['KWH/hh (per half hour) '] = pd.to_numeric(df['KWH/hh (per half hour) '])
-df['DateTime'] = pd.to_datetime(df['DateTime'], format='%Y-%m-%d %H:%M:%S.%f')
-df = df.rename(columns={"KWH/hh (per half hour) ": "kwh"})
-df['kwh'].dtype
-c_no1 = df[df['stdorToU'] == 'ToU'].LCLid.unique()
+frames = []
+c_no1 = []
+os.chdir(dir)
+for _ in glob.glob("*.csv"):
+    temp,c_not = dataframe(_)
+    frames.append(temp)
+    c_no1.extend(c_not.tolist())
+df = pd.concat(frames)
+len(c_no1)
 #%%
-df = df[df['LCLid'].isin(c_no1)]
 #%%
 tariff = pd.read_excel("C:/Users/p0p/Desktop/anaomaly/London carbon/tariffs.xlsx")
 #tariff2 = pd.read_excel("C:/Users/p0p/Desktop/anaomaly/London carbon/tariffs.xlsx")
@@ -306,18 +334,27 @@ de, fe, tim = {},{},{}
 for f in (48,52,5):
     oo=0
     de[f],fe[f],tim[f] = [],[],[]
-    for o in range(1,len(c_no1)):
-        oo = oo + 1
-        a,b, tima = features_f_detector(o,clf,f)
-        de[f].append(a)
-        fe[f].append(b)
-        tim[f].append(tima)
+    for o in range(0,100):
+        try:
+            oo = oo + 1
+            a,b, tima = features_f_detector(o,clf,f)
+            de[f].append(a)
+            fe[f].append(b)
+            tim[f].append(tima)
+        except:
+            continue
 #%%
 #for f in (48,52,5):
 #    ts = timeit.default_timer()
 #    print(features_f_detector(1,clf,f))
 #    te = timeit.default_timer()
 #    print(ts-te)
+#%%
+for _ in de:
+#    print(np.mean(de[_]),_)
+    plt.scatter( np.arange(1,len(de[_])+1),de[_],label = ("%0.2f"%np.mean(de[_]),_))
+    plt.legend()
+    plt.show()
 #%%
 for _ in de:
 #    print(np.mean(de[_]),_)
@@ -339,8 +376,3 @@ for _ in tim:
     plt.legend()
     plt.show()
 #%%
-k = df[(df['LCLid'] == c_no1[0])]
-X = np.array([]).reshape(0,48)
-y = np.array([]).reshape(0,48)
-#%%
-
