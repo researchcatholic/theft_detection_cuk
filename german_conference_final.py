@@ -8,7 +8,6 @@ Created on Mon Feb 11 13:59:12 2019
 import matplotlib.pyplot as plt
 import numpy as np; np.random.seed(sum(map(ord, 'calmap')))
 import pandas as pd
-import calmap
 from sklearn.cluster import KMeans
 from sklearn.svm import OneClassSVM
 from sklearn.ensemble import IsolationForest
@@ -51,11 +50,14 @@ from dateutil.rrule import rrule, DAILY
 import itertools
 from itertools import chain, repeat
 import os
+
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 #%%
-data_1 = pd.read_csv("C:/Users/p0p/Desktop/anaomaly/1year_Example-1.csv")
-data_2 = pd.read_csv("C:/Users/p0p/Desktop/anaomaly/1year_Example-2.csv")
-data_3 = pd.read_csv("C:/Users/p0p/Desktop/anaomaly/1year_Example-3.csv")
-data_4 = pd.read_csv("C:/Users/p0p/Desktop/anaomaly/1year_Example-4.csv")
+data_1 = pd.read_csv("C:/Users/User/Desktop/German anomaly/1year_Example-1.csv")
+data_2 = pd.read_csv("C:/Users/User/Desktop/German anomaly/1year_Example-2.csv")
+data_3 = pd.read_csv("C:/Users/User/Desktop/German anomaly/1year_Example-3.csv")
+data_4 = pd.read_csv("C:/Users/User/Desktop/German anomaly/1year_Example-4.csv")
 
 #new
 anomalies_1 = ["2012-02-04", "2012-07-18", "2012-12-03", "2012-12-04", "2012-11-16", "2012-12-02", "2012-02-05", "2012-05-14", "2012-05-15", "2012-05-16", "2012-07-18", "2012-09-10", "2012-09-11", "2012-09-12", "2012-09-15", "2012-09-16", "2012-10-30", "2012-11-16", "2012-12-02", "2012-12-03", "2012-12-04"]
@@ -66,6 +68,18 @@ anomalies_4 = ["2013-10-07", "2013-10-11",  "2012-11-04", "2013-11-06", "2013-11
 
 
 datadict = {1:(data_1,anomalies_1), 2:(data_2,anomalies_2), 3:(data_3,anomalies_3), 4:(data_4,anomalies_4)}
+#%% ano type labelling
+def ano_lbl(anomalies):
+    lbl_ano = {}
+    for __ in anomalies:
+        lbl_ano[__] = np.random.randint(0,2)
+    return lbl_ano
+#%%
+ano_lbl_1 = ano_lbl(anomalies_1)
+ano_lbl_2 = ano_lbl(anomalies_2)
+ano_lbl_3 = ano_lbl(anomalies_3)
+ano_lbl_4 = ano_lbl(anomalies_4)
+ano_type_dict = {1:ano_lbl_1,2:ano_lbl_2,3:ano_lbl_3,4:ano_lbl_4}
 #%%
 def preprocess(data_, plot = 0 ):
     print("processing dataset ")
@@ -117,9 +131,11 @@ def plot_confusion_matrix(cm, classes=('0','1'),
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     plt.tight_layout()
-
 #%%
-file_no = 3
+results_table1_ = {}
+results_table2_ = {}
+#%%
+file_no = 1
 outliers_fraction = 0.3
 random_state = np.random.RandomState(42)
 classi = {
@@ -135,7 +151,8 @@ classi = {
 }
     #%%
 data = preprocess(datadict[file_no][0]) 
-anomalies = datadict[file_no][1]  
+anomalies = datadict[file_no][1]
+ano_type_lbl = ano_type_dict[file_no]
 if file_no == 3: 
     data = data[data.index.weekday < 6]
 start_date = data.head(1).index.date[0]
@@ -146,36 +163,96 @@ data['time'] = data.index.time
 table = data.pivot_table(index = ["date"], columns = ["time"], values = "value")
 table = table.fillna(0).reset_index()
 table.tail()
-` 
 table['anomalies'] = 0
 for _ in anomalies:
     table['anomalies'][table['date'] == _] = 1
 #%%
-X = table[table.columns[1:145]].values
+table['ano_type'] = 'not'
+for __ in ano_type_lbl:
+    table.loc[table['date'] == __, 'ano_type'] = ano_type_lbl[__]
+#%%
+X = preprocessing.normalize(table[table.columns[1:145]].values)
 y = table[table.columns[145]].values
 ##%%
 #from sklearn.model_selection import train_test_split
 #X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.5, random_state=12)
 #%%
-answer = []
-for _ in range(1,10):
-    clflof = HBOS(alpha=_/10, contamination=0.1, n_bins=10, tol=0.1)
-    y_pred = clflof.fit_predict(X)
-    answer.append(confusion_matrix(y, y_pred)[1][1])   
-plt.plot(np.arange(1,10),answer,label = 'sds%d'%(n_bins))       
-plt.legend()
-
-#    [alpha w.r.t. no_bins]
 #%%
-loff = []
-for _ in range(5,30):
-    LOFclf = CBLOF(contamination=outliers_fraction,
-              check_estimator=False, random_state=random_state,n_clusters=_)
-    y_pred = LOFclf.fit_predict(preprocessing.normalize(table[table.columns[1:145]].values))
-    y_true = table.anomalies.values
-#print(confusion_matrix(y_true, y_pred))
-    loff.append(confusion_matrix(y_true, y_pred)[1][1])
-plt.plot(loff)
+outliers_fraction = 0.1
+classifiers = ['CBLOF', 'HBOS', 'KNN', 'LOF']
+para_range = {'CBLOF': (' 10', '50'), 'HBOS': (' 4', '50'), 'KNN': ('4', '30'), 'LOF': ('4', '20')}
+answers_dict = {}
+#%%
+def ranger(parameter,classifier):
+    __ = parameter
+    classi__ = {
+    'CBLOF':
+        (CBLOF(contamination=outliers_fraction,
+              check_estimator=False, random_state=random_state,n_clusters=__)),
+    'HBOS': (HBOS(
+        contamination=outliers_fraction, n_bins=__)),
+    'KNN': (KNN(
+        contamination=outliers_fraction,n_neighbors=__)),
+    'LOF':
+        (LOF(n_neighbors=__, contamination=outliers_fraction))
+        }
+    return classi__[classifier] 
+#%%
+#classifier = classifiers[3]
+for clf_no in range(0,4):
+    classifier = classifiers[clf_no]
+    a,b = para_range[classifier]
+    answers_dict[classifier] = {}
+    answers_dict[classifier]['graph'] = []
+    maxx = 0
+    answers_dict[classifier]['best'] = []
+    for __ in range(int(a),int(b)):
+        clf = ranger(__,classifier)
+        y_pred = clf.fit_predict(X)
+        ano_de = confusion_matrix(y, y_pred)[1][1]
+        answers_dict[classifier]['graph'].append(ano_de) 
+        if ano_de > maxx:
+            maxx = ano_de
+            par = __
+#    plt.figure()
+#    plt.scatter(np.arange(int(a),int(b)),answers_dict[classifier]['graph'])
+#    plt.xticks(np.arange(int(a),int(b)))
+#    plt.xlabel("range of the parameter")
+#    plt.ylabel("%s"%(classifier))
+#    plt.show()
+    answers_dict[classifier]['best'] = (par, maxx)
+    clf = ranger(par,classifier)
+    y_pred = clf.fit_predict(X)
+    ano_de = confusion_matrix(y, y_pred)[1][1]
+    table['pred_by %s'%(classifier)] = y_pred
+    answers_dict[classifier]['single'] = table[(table['pred_by %s'%(classifier)] == 1)&(table['ano_type'] == 1)].shape[0]
+    answers_dict[classifier]['multiple'] = table[(table['pred_by %s'%(classifier)] == 1)&(table['ano_type'] == 1)].shape[1]
+
+#%%
+for clf_no in range(0,4):
+    classifier = classifiers[clf_no]
+    plt.figure()
+    plt.title("%s" %(classifier))
+    for __ in table.index[(table['ano_type'] == 1)]:
+        plt.plot(table.iloc[__][1:145].values,color = 'black',linestyle='-.')
+    for __ in table.index[(table['pred_by %s'%(classifier)] == 1)&(table['ano_type'] == 1)]:
+        plt.plot(table.iloc[__][1:145].values,color = 'black')
+    
+    #%%
+    for __ in table.index[(table['ano_type'] == 0)]:
+        plt.plot(table.iloc[__][1:145].values,color = 'black',linestyle='-.')
+    for __ in table.index[(table['pred_by %s'%(classifier)] == 1)&(table['ano_type'] == 0)]:
+        plt.plot(table.iloc[__][1:145].values,color = 'black')
+        
+    #%%
+    for __ in table.index[(table['pred_by %s'%(classifier)] == 1)&(table['anomalies'] == 0)]:
+        plt.plot(table.iloc[__][1:145].values,color = 'black')
+        
+#%%
+    
+
+
+
 #%%
 for jo in classi:
     clf = classi[jo]
